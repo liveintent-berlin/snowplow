@@ -37,7 +37,7 @@ import scala.annotation.tailrec
  */
 object Shredder {
 
-  private val schemaPattern = """.+:([a-zA-Z0-9_\.]+)/([a-zA-Z0-9_]+)/[^/]+/(.*)""".r
+  private val schemaPattern = """^iglu:([a-zA-Z0-9-_.]+)/([a-zA-Z0-9-_]+)/[a-zA-Z0-9-_]+/([0-9]+-[0-9]+-[0-9]+)$""".r
 
   /**
    * Create an Elasticsearch field name from a schema

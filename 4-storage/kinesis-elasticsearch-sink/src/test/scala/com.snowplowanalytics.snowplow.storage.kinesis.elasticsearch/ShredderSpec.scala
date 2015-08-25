@@ -134,7 +134,7 @@ class ShredderSpec extends Specification with ValidationMatchers {
       val expected = NonEmptyList(
         "Could not extract inner data field from custom context",
         "Context JSON did not contain a stringly typed schema field",
-        """Schema failing does not conform to regular expression .+:([a-zA-Z0-9_\.]+)/([a-zA-Z0-9_]+)/[^/]+/(.*)""")
+        """Schema failing does not conform to regular expression ^iglu:([a-zA-Z0-9-_.]+)/([a-zA-Z0-9-_]+)/[a-zA-Z0-9-_]+/([0-9]+-[0-9]+-[0-9]+)$""")
 
       actual must be failing(expected)
     }
