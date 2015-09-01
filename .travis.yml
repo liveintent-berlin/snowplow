@@ -10,6 +10,8 @@ script:
   - sbt publish-local
   - cd ../scala-hadoop-enrich
   - sbt test
+  - cd ../scala-kinesis-enrich
+  - sbt test
 env:
   global:
     - secure: j6RcEPeT5DCmThYA+KSvn5zoFdwhO9Tyk9xXVrW+L8oTTAehDvEWQ1nkJM7m+KYwUtWH1bvRd9IOZgKkWxJeYSDvn8V0zd0dJKSc7R4kykfI/S3V67uM1LCj24B1dF62uiTMOFd9inwB3SLhVFwRk+tcgrZMLs9ljqND77pGR4Y=
