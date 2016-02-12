@@ -401,10 +401,19 @@ object EnrichmentManager {
       case None => Nil
     }
 
+    // Execute header extractor enrichment
+    val headerExtractorContext = registry.getHeaderExtractorEnrichment match {
+      case Some(hee) =>
+        val headers = raw.context.headers
+
+        hee.extract(headers)
+      case None => Nil
+    }
+
     // Assemble array of derived contexts
     val derived_contexts = List(uaParser).collect {
       case Success(Some(context)) => context
-    } ++ jsScript.getOrElse(Nil) ++ cookieExtractorContext
+    } ++ jsScript.getOrElse(Nil) ++ cookieExtractorContext ++ headerExtractorContext
 
     if (derived_contexts.size > 0) {
       event.derived_contexts = ME.formatDerivedContexts(derived_contexts)
