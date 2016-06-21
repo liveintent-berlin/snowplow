@@ -154,6 +154,9 @@ class CollectorConfig(config: Config) {
   val port = collector.getInt("port")
   val production = collector.getBoolean("production")
 
+  val thirdPartyCookiesParameter = collector.getOptionalString("third-party-cookie-param").getOrElse("n3pc")
+  val fallbackNetworkUserId = collector.getOptionalString("fallback-network-id").getOrElse("00000000-0000-4000-A000-000000000000")
+
   private val p3p = collector.getConfig("p3p")
   val p3pPolicyRef = p3p.getString("policyref")
   val p3pCP = p3p.getString("CP")
@@ -206,4 +209,6 @@ class CollectorConfig(config: Config) {
   def cookieName = cookieConfig.map(_.name)
   def cookieDomain = cookieConfig.flatMap(_.domain)
   def cookieExpiration = cookieConfig.map(_.expiration)
+
+
 }
