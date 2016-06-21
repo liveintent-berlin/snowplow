@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.net.URI
 import org.apache.http.client.utils.URLEncodedUtils
+import spray.http.{HttpHeader, HttpResponse, StatusCodes}
 
 // Apache Commons
 import org.apache.commons.codec.binary.Base64
@@ -100,23 +101,29 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       request: HttpRequest, refererUri: Option[String], path: String, pixelExpected: Boolean):
       (HttpResponse, List[Array[Byte]]) = {
 
-      // Make a Tuple2 with the ip address and the shard partition key
-      val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
-        case None     => ("unknown", UUID.randomUUID.toString)
-        case Some(ip) => (ip, if (config.useIpAddressAsPartitionKey) ip else UUID.randomUUID.toString)
-      }
+    val thirdPartyCookieParamPresent = Option(queryParams).exists(_.contains(config.thirdPartyCookiesParameter))
+    val shouldRedirect = requestCookie.isEmpty && !thirdPartyCookieParamPresent
 
-      // Check if nuid param is present
-      val networkUserIdParam = request.uri.query.get("nuid")
-      val networkUserId: String = networkUserIdParam match {
-        // Use nuid as networkUserId if present
-        case Some(nuid) => nuid
-        // Else use the same UUID if the request cookie contains `sp`.
-        case None =>  requestCookie match {
-          case Some(rc) => rc.content
-          case None     => UUID.randomUUID.toString
-        }
+    // Make a Tuple2 with the ip address and the shard partition key
+    val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
+      case None => ("unknown", UUID.randomUUID.toString)
+      case Some(someIp) => (someIp, if (config.useIpAddressAsPartitionKey) someIp else UUID.randomUUID.toString)
+    }
+
+    // Check if nuid param is present
+    val networkUserIdParam = request.uri.query.get("nuid")
+    val networkUserId: String = networkUserIdParam match {
+      // Use nuid as networkUserId if present
+      case Some(nuid) => nuid
+      // Else use the same UUID if the request cookie contains `sp`.
+      case None =>  requestCookie match {
+        case Some(rc) => rc.content
+        case None     =>
+          if (thirdPartyCookieParamPresent) config.fallbackNetworkUserId
+          else UUID.randomUUID.toString
       }
+    }
+
 
       // Construct an event object from the request.
       val timestamp: Long = System.currentTimeMillis
@@ -165,26 +172,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
         null
       }
 
-      val policyRef = config.p3pPolicyRef
-      val CP = config.p3pCP
-
-      val headersWithoutCookie = List(
-        RawHeader("P3P", "policyref=\"%s\", CP=\"%s\"".format(policyRef, CP)),
-        getAccessControlAllowOriginHeader(request),
-        `Access-Control-Allow-Credentials`(true)
-      )
-
-      val headers = config.cookieConfig match {
-        case Some(cookieConfig) =>
-          val responseCookie = HttpCookie(
-            cookieConfig.name, networkUserId,
-            expires=Some(DateTime.now + cookieConfig.expiration),
-            domain=cookieConfig.domain,
-            path=Some("/")
-          )
-          `Set-Cookie`(responseCookie) :: headersWithoutCookie
-        case None => headersWithoutCookie
-      }
+    val headers = composeHeaders(request, shouldRedirect, networkUserId)
 
       val (httpResponse, badQsResponse) = if (path startsWith "/r/") {
         // A click redirect
@@ -219,6 +207,32 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
 
       (httpResponse, badQsResponse ++ sinkResponse)
     }
+
+  private def composeHeaders(request: HttpRequest, shouldRedirect: Boolean, networkUserId: String) = {
+    val headersWithoutCookie = List(
+      RawHeader("P3P", "policyref=\"%s\", CP=\"%s\"".format(config.p3pPolicyRef, config.p3pCP)),
+      getAccessControlAllowOriginHeader(request),
+      `Access-Control-Allow-Credentials`(true)
+    )
+
+    val resolvedCookies = config.cookieConfig match {
+      case Some(cookieConfig) =>
+        val responseCookie = HttpCookie(
+          cookieConfig.name, networkUserId,
+          expires = Some(DateTime.now + cookieConfig.expiration),
+          domain = cookieConfig.domain,
+          path=Some("/")
+        )
+        `Set-Cookie`(responseCookie) :: headersWithoutCookie
+      case None => headersWithoutCookie
+    }
+
+    val headers = if (shouldRedirect) {
+      val redirect = request.uri.withQuery(Map(config.thirdPartyCookiesParameter -> "true"))
+      `Location`(redirect) :: resolvedCookies
+    } else resolvedCookies
+    headers
+  }
 
   /**
    * Creates a response to the CORS preflight Options request
