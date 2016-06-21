@@ -17,6 +17,8 @@ package collectors
 package scalastream
 
 // Scala
+import spray.http.StatusCodes
+
 import scala.collection.mutable.MutableList
 
 // Akka
@@ -25,20 +27,14 @@ import akka.actor.{ActorSystem, Props}
 // Specs2 and Spray testing
 import org.specs2.matcher.AnyMatchers
 import org.specs2.mutable.Specification
-import org.specs2.specification.{Scope,Fragments}
 import spray.testkit.Specs2RouteTest
 
 // Spray
 import spray.http.{DateTime,HttpHeader,HttpRequest,HttpCookie,RemoteAddress}
-import spray.http.HttpHeaders.{
-  Cookie,
-  `Set-Cookie`,
-  `Remote-Address`,
-  `Raw-Request-URI`
-}
+import spray.http.HttpHeaders._
 
 // Config
-import com.typesafe.config.{ConfigFactory,Config,ConfigException}
+import com.typesafe.config.{ConfigFactory,Config}
 
 // Thrift
 import org.apache.thrift.TDeserializer
@@ -114,11 +110,43 @@ collector {
   }
 
   "Snowplow's Scala collector" should {
-    "return an invisible pixel" in {
+    "return a redirect with n3pc parameter " in {
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
+        response.status.mustEqual(StatusCodes.Found)
+        val locationHeader: String = header("Location").get.value
+        locationHeader must contain(collectorConfig.thirdPartyCookiesParameter)
+      }
+    }
+
+    "set the fallback cookie value after calling it with n3pc parameter without cookies" in {
+      CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}") ~> collectorService.collectorRoute ~> check {
+        response.status.mustEqual(StatusCodes.OK)
+        val httpCookies: List[HttpCookie] = headers.collect {
+          case `Set-Cookie`(hc) => hc
+        }
+        httpCookies must not be empty
+        val httpCookie = httpCookies.head
+        httpCookie.content mustEqual collectorConfig.fallbackNetworkUserId
+      }
+    }
+
+    "return the correct cookie even after calling it with n3pc parameter" in {
+      CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}", Some(HttpCookie(collectorConfig.cookieName.get, "UUID_Test"))) ~>
+        collectorService.collectorRoute ~> check {
+        val httpCookies: List[HttpCookie] = headers.collect {
+          case `Set-Cookie`(hc) => hc
+        }
+        val httpCookie = httpCookies.head
+        httpCookie.content must beEqualTo("UUID_Test")
+      }
+    }
+
+    "return an invisible pixel" in {
+      CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}") ~> collectorService.collectorRoute ~> check {
         responseAs[Array[Byte]] === ResponseHandler.pixel
       }
     }
+
     "return a cookie expiring at the correct time" in {
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         headers must not be empty
@@ -174,7 +202,7 @@ collector {
     "store the expected event as a serialized Thrift object in the enabled sink" in {
       val payloadData = "param1=val1&param2=val2"
       val storedRecordBytes = responseHandler.cookie(payloadData, null, None,
-        None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, "/i", true)._2
+        None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, "/i", pixelExpected = true)._2
 
       val storedEvent = new CollectorPayload
       this.synchronized {
@@ -188,6 +216,7 @@ collector {
       storedEvent.path must beEqualTo("/i")
       storedEvent.querystring must beEqualTo(payloadData)
     }
+
     "report itself as healthy" in {
       CollectorGet("/health") ~> collectorService.collectorRoute ~> check {
         response.status must beEqualTo(spray.http.StatusCodes.OK)
