@@ -124,9 +124,8 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       }
     }
 
-
-      // Construct an event object from the request.
-      val timestamp: Long = System.currentTimeMillis
+    // Construct an event object from the request.
+    val timestamp: Long = System.currentTimeMillis
 
     val event = new CollectorPayload(
       "iglu:com.snowplowanalytics.snowplow/CollectorPayload/thrift/1-0-0",
@@ -156,8 +155,8 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       ct => event.contentType = ct.value.toLowerCase
     }
 
-      // Only send to Kinesis if we aren't shutting down
-    val sinkResponse = if (!KinesisSink.shuttingDown) {
+    // Only send to Kinesis if we aren't shutting down or we're expecting a redirect
+    val sinkResponse = if (!KinesisSink.shuttingDown || shouldRedirect) {
 
       // Split events into Good and Bad
       val eventSplit = SplitBatch.splitAndSerializePayload(event, sinks.good.MaxBytes)
@@ -198,12 +197,14 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     } else if (KinesisSink.shuttingDown) {
       // So that the tracker knows the request failed and can try to resend later
       notFound -> Nil
-    } else (if (pixelExpected) {
-      HttpResponse(entity = HttpEntity(`image/gif`, ResponseHandler.pixel))
     } else {
-      // See https://github.com/snowplow/snowplow-javascript-tracker/issues/482
-      HttpResponse(entity = "ok")
-    }).withHeaders(headers) -> Nil
+      if (pixelExpected) {
+        if (shouldRedirect) HttpResponse(StatusCodes.Found) else HttpResponse(entity = HttpEntity(`image/gif`, ResponseHandler.pixel))
+      } else {
+        // See https://github.com/snowplow/snowplow-javascript-tracker/issues/482
+        HttpResponse(entity = "ok")
+      }
+    }.withHeaders(headers) -> Nil
 
     (httpResponse, badQsResponse ++ sinkResponse)
   }
