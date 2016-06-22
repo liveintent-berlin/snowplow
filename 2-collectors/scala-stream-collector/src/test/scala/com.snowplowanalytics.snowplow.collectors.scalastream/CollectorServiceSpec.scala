@@ -17,6 +17,7 @@ package collectors
 package scalastream
 
 // Scala
+import org.specs2.mock.Mockito
 import spray.http.StatusCodes
 
 import scala.collection.mutable.MutableList
@@ -43,7 +44,7 @@ import org.apache.thrift.TDeserializer
 import sinks._
 import CollectorPayload.thrift.model1.CollectorPayload
 
-class CollectorServiceSpec extends Specification with Specs2RouteTest with
+class CollectorServiceSpec extends Specification with Specs2RouteTest with Mockito with
      AnyMatchers {
    val testConf: Config = ConfigFactory.parseString("""
 collector {
@@ -91,7 +92,11 @@ collector {
 }
 """)
   val collectorConfig = new CollectorConfig(testConf)
-  val sink = new TestSink
+  val sink = smartMock[AbstractSink]
+  sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+      case Array(firstArg, drugi) => firstArg.asInstanceOf[List[Array[Byte]]]
+    }
+  }
   val sinks = CollectorSinks(sink, sink)
   val responseHandler = new ResponseHandler(collectorConfig, sinks)
   val collectorService = new CollectorService(collectorConfig, responseHandler, system)
@@ -113,6 +118,7 @@ collector {
     "return a redirect with n3pc parameter " in {
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         response.status.mustEqual(StatusCodes.Found)
+        there was no(sink).storeRawEvents(any, any)
         val locationHeader: String = header("Location").get.value
         locationHeader must contain(collectorConfig.thirdPartyCookiesParameter)
       }
@@ -124,6 +130,7 @@ collector {
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
+        there was atLeastThree(sink).storeRawEvents(any, any)
         httpCookies must not be empty
         val httpCookie = httpCookies.head
         httpCookie.content mustEqual collectorConfig.fallbackNetworkUserId
@@ -136,6 +143,7 @@ collector {
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
+        there was atLeastThree(sink).storeRawEvents(any, any)
         val httpCookie = httpCookies.head
         httpCookie.content must beEqualTo("UUID_Test")
       }
@@ -242,10 +250,22 @@ collector {
           "policyref=\"%s\", CP=\"%s\"".format(policyRef, CP))
       }
     }
-    "store the expected event as a serialized Thrift object in the enabled sink" in {
+
+    "do not store the expected event if there's no cookie" in {
       val payloadData = "param1=val1&param2=val2"
       val storedRecordBytes = responseHandler.cookie(payloadData, null, None,
         None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, "/i", pixelExpected = true)._2
+      storedRecordBytes must beEmpty
+    }
+
+    "store the expected event as a serialized Thrift object in the enabled sink only if cookie is present" in {
+      val payloadData = "param1=val1&param2=val2"
+      val sink = new TestSink
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val cookie = HttpCookie("SomeName",  "SOME_UUID")
+      val storedRecordBytes = responseHandler.cookie(payloadData, null, Some(cookie),
+        None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, s"/i", pixelExpected = true)._2
 
       val storedEvent = new CollectorPayload
       this.synchronized {

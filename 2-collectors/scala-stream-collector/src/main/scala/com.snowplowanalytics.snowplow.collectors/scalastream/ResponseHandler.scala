@@ -156,8 +156,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     }
 
     // Only send to Kinesis if we aren't shutting down or we're expecting a redirect
-    val sinkResponse = if (!KinesisSink.shuttingDown || shouldRedirect) {
-
+    val sinkResponse = if (!shouldRedirect && !KinesisSink.shuttingDown) {
       // Split events into Good and Bad
       val eventSplit = SplitBatch.splitAndSerializePayload(event, sinks.good.MaxBytes)
 
@@ -168,7 +167,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       // Sink Responses for Test Sink
       sinkResponseGood ++ sinkResponseBad
     } else {
-      null
+      Nil
     }
 
     val headers = composeHeaders(request, shouldRedirect, networkUserId)
