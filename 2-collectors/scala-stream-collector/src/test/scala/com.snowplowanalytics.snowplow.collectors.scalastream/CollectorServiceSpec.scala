@@ -167,11 +167,7 @@ collector {
     }
 
     "return an invisible pixel" in {
-      val sink = smartMock[AbstractSink]
-      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
-      }
-      }
+      val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
       val collectorService = new CollectorService(collectorConfig, responseHandler, system)
@@ -181,11 +177,7 @@ collector {
     }
 
     "return a cookie expiring at the correct time" in {
-      val sink = smartMock[AbstractSink]
-      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
-      }
-      }
+      val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
       val collectorService = new CollectorService(collectorConfig, responseHandler, system)
@@ -213,11 +205,7 @@ collector {
       }
     }
     "return the same cookie as passed in" in {
-      val sink = smartMock[AbstractSink]
-      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
-      }
-      }
+      val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
       val collectorService = new CollectorService(collectorConfig, responseHandler, system)
@@ -235,11 +223,7 @@ collector {
       }
     }
     "return a P3P header" in {
-      val sink = smartMock[AbstractSink]
-      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-          case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
-        }
-      }
+      val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
       val collectorService = new CollectorService(collectorConfig, responseHandler, system)
@@ -258,11 +242,7 @@ collector {
     }
 
     "do not store the expected event if there's no cookie" in {
-      val sink = smartMock[AbstractSink]
-      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
-      }
-      }
+      val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
 
