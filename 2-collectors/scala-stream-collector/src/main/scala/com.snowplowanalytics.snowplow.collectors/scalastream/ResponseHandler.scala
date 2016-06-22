@@ -149,8 +149,8 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       ct => event.contentType = ct.value.toLowerCase
     }
 
-    // Only send to Kinesis if we aren't shutting down
-    val sinkResponse = if (!KinesisSink.shuttingDown) {
+    // Only send to Kinesis if we aren't shutting down or we're expecting a redirect
+    val sinkResponse = if (!KinesisSink.shuttingDown || shouldRedirect) {
 
       // Split events into Good and Bad
       val eventSplit = SplitBatch.splitAndSerializePayload(event, sinks.good.MaxBytes)
