@@ -209,6 +209,4 @@ class CollectorConfig(config: Config) {
   def cookieName = cookieConfig.map(_.name)
   def cookieDomain = cookieConfig.flatMap(_.domain)
   def cookieExpiration = cookieConfig.map(_.expiration)
-
-
 }
