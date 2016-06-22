@@ -92,15 +92,6 @@ collector {
 }
 """)
   val collectorConfig = new CollectorConfig(testConf)
-  val sink = smartMock[AbstractSink]
-  sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
-      case Array(firstArg, drugi) => firstArg.asInstanceOf[List[Array[Byte]]]
-    }
-  }
-  val sinks = CollectorSinks(sink, sink)
-  val responseHandler = new ResponseHandler(collectorConfig, sinks)
-  val collectorService = new CollectorService(collectorConfig, responseHandler, system)
-  val thriftDeserializer = new TDeserializer
 
   // By default, spray will always add Remote-Address to every request
   // when running with the `spray.can.server.remote-address-header`
@@ -116,6 +107,15 @@ collector {
 
   "Snowplow's Scala collector" should {
     "return a redirect with n3pc parameter " in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+          case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+        }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
+
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         response.status.mustEqual(StatusCodes.Found)
         there was no(sink).storeRawEvents(any, any)
@@ -125,12 +125,20 @@ collector {
     }
 
     "set the fallback cookie value after calling it with n3pc parameter without cookies" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+          case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+        }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}") ~> collectorService.collectorRoute ~> check {
         response.status.mustEqual(StatusCodes.OK)
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
-        there was atLeastThree(sink).storeRawEvents(any, any)
+        there was two(sink).storeRawEvents(any, any)
         httpCookies must not be empty
         val httpCookie = httpCookies.head
         httpCookie.content mustEqual collectorConfig.fallbackNetworkUserId
@@ -138,24 +146,49 @@ collector {
     }
 
     "return the correct cookie even after calling it with n3pc parameter" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+          case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+        }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
+
       CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}", Some(HttpCookie(collectorConfig.cookieName.get, "UUID_Test"))) ~>
         collectorService.collectorRoute ~> check {
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
-        there was atLeastThree(sink).storeRawEvents(any, any)
+        there was two(sink).storeRawEvents(any, any)
         val httpCookie = httpCookies.head
         httpCookie.content must beEqualTo("UUID_Test")
       }
     }
 
     "return an invisible pixel" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet(s"/i?${collectorConfig.thirdPartyCookiesParameter}") ~> collectorService.collectorRoute ~> check {
         responseAs[Array[Byte]] === ResponseHandler.pixel
       }
     }
 
     "return a cookie expiring at the correct time" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         headers must not be empty
 
@@ -180,6 +213,14 @@ collector {
       }
     }
     "return the same cookie as passed in" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/i", Some(HttpCookie(collectorConfig.cookieName.get, "UUID_Test"))) ~>
           collectorService.collectorRoute ~> check {
         val httpCookies: List[HttpCookie] = headers.collect {
@@ -194,6 +235,14 @@ collector {
       }
     }
     "return a P3P header" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+          case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+        }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         val p3pHeaders = headers.filter {
           h => h.name.equals("P3P")
@@ -209,6 +258,14 @@ collector {
     }
 
     "do not store the expected event if there's no cookie" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+
       val payloadData = "param1=val1&param2=val2"
       val storedRecordBytes = responseHandler.cookie(payloadData, null, None,
         None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, "/i", pixelExpected = true)._2
@@ -220,6 +277,7 @@ collector {
       val sink = new TestSink
       val sinks = CollectorSinks(sink, sink)
       val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val thriftDeserializer = new TDeserializer
       val cookie = HttpCookie("SomeName",  "SOME_UUID")
       val storedRecordBytes = responseHandler.cookie(payloadData, null, Some(cookie),
         None, "localhost", RemoteAddress("127.0.0.1"), new HttpRequest(), None, s"/i", pixelExpected = true)._2
@@ -238,6 +296,10 @@ collector {
     }
 
     "report itself as healthy" in {
+      val sink = smartMock[AbstractSink]
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/health") ~> collectorService.collectorRoute ~> check {
         response.status must beEqualTo(spray.http.StatusCodes.OK)
       }
