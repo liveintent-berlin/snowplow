@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.net.URI
-
 import org.apache.http.client.utils.URLEncodedUtils
 import spray.http.{HttpHeader, HttpResponse, StatusCodes}
 
@@ -83,7 +82,9 @@ import com.snowplowanalytics.snowplow.enrich.common.outputs.BadRow
 
 // Contains an invisible pixel to return for `/i` requests.
 object ResponseHandler {
-  val pixel = Base64.decodeBase64("R0lGODlhAQABAPAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==")
+  val pixel = Base64.decodeBase64(
+    "R0lGODlhAQABAPAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+  )
 }
 
 // Receive requests and store data into an output sink.
@@ -228,11 +229,11 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
   }
 
   /**
-    * Creates a response to the CORS preflight Options request
-    *
-    * @param request Incoming preflight Options request
-    * @return Response granting permissions to make the actual request
-    */
+  * Creates a response to the CORS preflight Options request
+  *
+  * @param request Incoming preflight Options request
+  * @return Response granting permissions to make the actual request
+  */
   def preflightResponse(request: HttpRequest) = HttpResponse().withHeaders(List(
     getAccessControlAllowOriginHeader(request),
     `Access-Control-Allow-Credentials`(true),
@@ -244,20 +245,17 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
   )
 
   def healthy = HttpResponse(status = 200, entity = s"OK")
-
   def badRequest = HttpResponse(status = 400, entity = "400 Bad request")
-
   def notFound = HttpResponse(status = 404, entity = "404 Not found")
-
   def timeout = HttpResponse(status = 500, entity = s"Request timed out.")
 
   /**
-    * Creates an Access-Control-Allow-Origin header which specifically
-    * allows the domain which made the request
-    *
-    * @param request Incoming request
-    * @return Header
-    */
+  * Creates an Access-Control-Allow-Origin header which specifically
+  * allows the domain which made the request
+  *
+  * @param request Incoming request
+  * @return Header
+  */
   private def getAccessControlAllowOriginHeader(request: HttpRequest) =
     `Access-Control-Allow-Origin`(request.headers.find {
       case `Origin`(origin) => true
@@ -268,12 +266,12 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     })
 
   /**
-    * Put together a bad row ready for sinking to Kinesis
-    *
-    * @param event
-    * @param message
-    * @return Bad row
-    */
+  * Put together a bad row ready for sinking to Kinesis
+  *
+  * @param event
+  * @param message
+  * @return Bad row
+  */
   private def createBadRow(event: CollectorPayload, message: String): Array[Byte] = {
     BadRow(new String(SplitBatch.ThriftSerializer.get().serialize(event)), NonEmptyList(message)).toCompactJson.getBytes(UTF_8)
   }
