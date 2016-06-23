@@ -118,9 +118,15 @@ collector {
 
       CollectorGet("/i") ~> collectorService.collectorRoute ~> check {
         response.status.mustEqual(StatusCodes.Found)
+        //we're redirecting so we should not save anything to kinesis
         there was no(sink).storeRawEvents(any, any)
         val locationHeader: String = header("Location").get.value
+        val httpCookies: List[HttpCookie] = headers.collect {
+          case `Set-Cookie`(hc) => hc
+        }
         locationHeader must contain(collectorConfig.thirdPartyCookiesParameter)
+        //a cookie must be sent back
+        httpCookies must not be empty
       }
     }
 
@@ -138,7 +144,9 @@ collector {
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
+        //we have done the 3rd party cookie check, and we're storing event.
         there was two(sink).storeRawEvents(any, any)
+        //there was a cookie added
         httpCookies must not be empty
         val httpCookie = httpCookies.head
         httpCookie.content mustEqual collectorConfig.fallbackNetworkUserId
@@ -160,6 +168,7 @@ collector {
         val httpCookies: List[HttpCookie] = headers.collect {
           case `Set-Cookie`(hc) => hc
         }
+        //we have done the 3rd party cookie check, and we're storing event.
         there was two(sink).storeRawEvents(any, any)
         val httpCookie = httpCookies.head
         httpCookie.content must beEqualTo("UUID_Test")
