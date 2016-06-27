@@ -105,10 +105,10 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     val shouldRedirect = config.n3pcRedirectEnabled && requestCookie.isEmpty && !thirdPartyCookieParamPresent && pixelExpected
 
     // Make a Tuple2 with the ip address and the shard partition key
-      val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
-        case None     => ("unknown", UUID.randomUUID.toString)
-        case Some(ip) => (ip, if (config.useIpAddressAsPartitionKey) ip else UUID.randomUUID.toString)
-      }
+    val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
+      case None     => ("unknown", UUID.randomUUID.toString)
+      case Some(ip) => (ip, if (config.useIpAddressAsPartitionKey) ip else UUID.randomUUID.toString)
+    }
 
     // Check if nuid param is present
     val networkUserIdParam = request.uri.query.get("nuid")
@@ -221,7 +221,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
           cookieConfig.name, networkUserId,
           expires = Some(DateTime.now + cookieConfig.expiration),
           domain = cookieConfig.domain,
-          path=Some("/")
+          path = Some("/")
         )
         `Set-Cookie`(responseCookie) :: headersWithoutCookie
       case None => headersWithoutCookie
@@ -263,10 +263,10 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
    * @return Header
    */
   private def getAccessControlAllowOriginHeader(request: HttpRequest) =
-    `Access-Control-Allow-Origin`(request.headers.find(_ match {
+    `Access-Control-Allow-Origin`(request.headers.find {
       case `Origin`(origin) => true
       case _ => false
-    }) match {
+    } match {
       case Some(`Origin`(origin)) => SomeOrigins(origin)
       case _ => AllOrigins
     })
