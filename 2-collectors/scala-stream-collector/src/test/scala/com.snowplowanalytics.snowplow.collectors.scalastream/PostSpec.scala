@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 Snowplow Analytics Ltd. All rights reserved.
+ * Copyright (c) 2014 Snowplow Analytics Ltd. All rights reserved.
  *
  * This program is licensed to you under the Apache License Version 2.0, and
  * you may not use this file except in compliance with the Apache License
@@ -128,6 +128,7 @@ collector {
         // this will need to be changed.
         val httpCookie = httpCookies(0)
 
+        httpCookie.path must beSome("/")
         httpCookie.name must beEqualTo(collectorConfig.cookieName.get)
         httpCookie.domain must beSome
         httpCookie.domain.get must be(collectorConfig.cookieDomain.get)
