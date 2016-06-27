@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.net.URI
 import org.apache.http.client.utils.URLEncodedUtils
+import spray.http.{HttpHeader, HttpResponse, StatusCodes}
 
 // Apache Commons
 import org.apache.commons.codec.binary.Base64
@@ -96,122 +97,135 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
   // When `/i` is requested, this is called and stores an event in the
   // Kinisis sink and returns an invisible pixel with a cookie.
   def cookie(queryParams: String, body: String, requestCookie: Option[HttpCookie],
-      userAgent: Option[String], hostname: String, ip: RemoteAddress,
-      request: HttpRequest, refererUri: Option[String], path: String, pixelExpected: Boolean):
-      (HttpResponse, List[Array[Byte]]) = {
+             userAgent: Option[String], hostname: String, ip: RemoteAddress,
+             request: HttpRequest, refererUri: Option[String], path: String, pixelExpected: Boolean):
+  (HttpResponse, List[Array[Byte]]) = {
 
-      // Make a Tuple2 with the ip address and the shard partition key
-      val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
-        case None     => ("unknown", UUID.randomUUID.toString)
-        case Some(ip) => (ip, if (config.useIpAddressAsPartitionKey) ip else UUID.randomUUID.toString)
-      }
+    val thirdPartyCookieParamPresent = Option(queryParams).exists(_.contains(config.thirdPartyCookiesParameter))
+    val shouldRedirect = config.n3pcRedirectEnabled && requestCookie.isEmpty && !thirdPartyCookieParamPresent && pixelExpected
 
-      // Use the same UUID if the request cookie contains `sp`.
-      val networkUserId: String = requestCookie match {
-        case Some(rc) => rc.content
-        case None => UUID.randomUUID.toString
-      }
+    // Make a Tuple2 with the ip address and the shard partition key
+    val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
+      case None => ("unknown", UUID.randomUUID.toString)
+      case Some(someIp) => (someIp, if (config.useIpAddressAsPartitionKey) someIp else UUID.randomUUID.toString)
+    }
 
-      // Construct an event object from the request.
-      val timestamp: Long = System.currentTimeMillis
+    // Use the same UUID if the request cookie contains `sp`.
+    val networkUserId: String = requestCookie match {
+      case Some(rc) => rc.content
+      case None =>
+        if (thirdPartyCookieParamPresent) config.fallbackNetworkUserId
+        else UUID.randomUUID.toString
+    }
 
-      val event = new CollectorPayload(
-        "iglu:com.snowplowanalytics.snowplow/CollectorPayload/thrift/1-0-0",
-        ipAddress,
-        timestamp,
-        "UTF-8",
-        Collector
-      )
+    // Construct an event object from the request.
+    val timestamp: Long = System.currentTimeMillis
 
-      event.path = path
-      event.querystring = queryParams
-      event.body = body
-      event.hostname = hostname
-      event.networkUserId = networkUserId
+    val event = new CollectorPayload(
+      "iglu:com.snowplowanalytics.snowplow/CollectorPayload/thrift/1-0-0",
+      ipAddress,
+      timestamp,
+      "UTF-8",
+      Collector
+    )
 
-      userAgent.foreach(event.userAgent = _)
-      refererUri.foreach(event.refererUri = _)
-      event.headers = request.headers.flatMap {
-        case _: `Remote-Address` | _: `Raw-Request-URI` => None
-        case other => Some(other.toString)
-      }
+    event.path = path
+    event.querystring = queryParams
+    event.body = body
+    event.hostname = hostname
+    event.networkUserId = networkUserId
 
-      // Set the content type
-      request.headers.find(_ match {case `Content-Type`(ct) => true; case _ => false}) foreach {
+    userAgent.foreach(event.userAgent = _)
+    refererUri.foreach(event.refererUri = _)
+    event.headers = request.headers.flatMap {
+      case _: `Remote-Address` | _: `Raw-Request-URI` => None
+      case other => Some(other.toString)
+    }
 
-        // toLowerCase called because Spray seems to convert "utf" to "UTF"
-        ct => event.contentType = ct.value.toLowerCase
-      }
+    // Set the content type
+    request.headers.find { case `Content-Type`(ct) => true; case _ => false } foreach {
 
-      // Only send to Kinesis if we aren't shutting down
-      val sinkResponse = if (!KinesisSink.shuttingDown) {
+      // toLowerCase called because Spray seems to convert "utf" to "UTF"
+      ct => event.contentType = ct.value.toLowerCase
+    }
 
-        // Split events into Good and Bad
-        val eventSplit = SplitBatch.splitAndSerializePayload(event, sinks.good.MaxBytes)
+    // Only send to Kinesis if we aren't shutting down and we're not going to redirect
+    val sinkResponse = if (!shouldRedirect && !KinesisSink.shuttingDown) {
+      // Split events into Good and Bad
+      val eventSplit = SplitBatch.splitAndSerializePayload(event, sinks.good.MaxBytes)
 
-        // Send events to respective sinks
-        val sinkResponseGood = sinks.good.storeRawEvents(eventSplit.good, partitionKey)
-        val sinkResponseBad  = sinks.bad.storeRawEvents(eventSplit.bad, partitionKey)
+      // Send events to respective sinks
+      val sinkResponseGood = sinks.good.storeRawEvents(eventSplit.good, partitionKey)
+      val sinkResponseBad = sinks.bad.storeRawEvents(eventSplit.bad, partitionKey)
 
-        // Sink Responses for Test Sink
-        sinkResponseGood ++ sinkResponseBad
-      } else {
-        null
-      }
+      // Sink Responses for Test Sink
+      sinkResponseGood ++ sinkResponseBad
+    } else {
+      Nil
+    }
 
-      val policyRef = config.p3pPolicyRef
-      val CP = config.p3pCP
+    val headers = composeHeaders(request, shouldRedirect, networkUserId)
 
-      val headersWithoutCookie = List(
-        RawHeader("P3P", "policyref=\"%s\", CP=\"%s\"".format(policyRef, CP)),
-        getAccessControlAllowOriginHeader(request),
-        `Access-Control-Allow-Credentials`(true)
-      )
-
-      val headers = config.cookieConfig match {
-        case Some(cookieConfig) =>
-          val responseCookie = HttpCookie(
-            cookieConfig.name, networkUserId,
-            expires=Some(DateTime.now + cookieConfig.expiration),
-            domain=cookieConfig.domain
-          )
-          `Set-Cookie`(responseCookie) :: headersWithoutCookie
-        case None => headersWithoutCookie
-      }
-
-      val (httpResponse, badQsResponse) = if (path startsWith "/r/") {
-        // A click redirect
-        try {
-          // TODO: log errors to Kinesis as BadRows
-          val target = URLEncodedUtils.parse(URI.create("?" + queryParams), "UTF-8")
-            .find(_.getName == "u")
-            .map(_.getValue)
-          target match {
-            case Some(t) => HttpResponse(302).withHeaders(`Location`(t) :: headers) -> Nil
-            // case None => badRequest -> sinks.bad.storeRawEvents(List("TODO".getBytes), partitionKey)
-            case None => {
-              val everythingSerialized = new String(SplitBatch.ThriftSerializer.get().serialize(event))
-              badRequest -> sinks.bad.storeRawEvents(List(createBadRow(event, s"Redirect failed due to lack of u parameter")), partitionKey)
-            }
-          }
-        } catch {
-          case NonFatal(e) => {
+    val (httpResponse, badQsResponse) = if (path startsWith "/r/") {
+      // A click redirect
+      try {
+        // TODO: log errors to Kinesis as BadRows
+        val target = URLEncodedUtils.parse(URI.create("?" + queryParams), "UTF-8")
+          .find(_.getName == "u")
+          .map(_.getValue)
+        target match {
+          case Some(t) => HttpResponse(302).withHeaders(`Location`(t) :: headers) -> Nil
+          // case None => badRequest -> sinks.bad.storeRawEvents(List("TODO".getBytes), partitionKey)
+          case None => {
             val everythingSerialized = new String(SplitBatch.ThriftSerializer.get().serialize(event))
-            badRequest -> sinks.bad.storeRawEvents(List(createBadRow(event, s"Redirect failed due to error $e")), partitionKey)
+            badRequest -> sinks.bad.storeRawEvents(List(createBadRow(event, s"Redirect failed due to lack of u parameter")), partitionKey)
           }
         }
-      } else if (KinesisSink.shuttingDown) {
-        // So that the tracker knows the request failed and can try to resend later
-        notFound -> Nil
-      } else (if (pixelExpected) {
-        HttpResponse(entity = HttpEntity(`image/gif`, ResponseHandler.pixel))
+      } catch {
+        case NonFatal(e) => {
+          val everythingSerialized = new String(SplitBatch.ThriftSerializer.get().serialize(event))
+          badRequest -> sinks.bad.storeRawEvents(List(createBadRow(event, s"Redirect failed due to error $e")), partitionKey)
+        }
+      }
+    } else if (KinesisSink.shuttingDown) {
+      // So that the tracker knows the request failed and can try to resend later
+      notFound -> Nil
+    } else {
+      if (pixelExpected) {
+        if (shouldRedirect) HttpResponse(StatusCodes.Found) else HttpResponse(entity = HttpEntity(`image/gif`, ResponseHandler.pixel))
       } else {
         // See https://github.com/snowplow/snowplow-javascript-tracker/issues/482
         HttpResponse(entity = "ok")
-      }).withHeaders(headers) -> Nil
+      }
+    }.withHeaders(headers) -> Nil
 
-      (httpResponse, badQsResponse ++ sinkResponse)
+    (httpResponse, badQsResponse ++ sinkResponse)
+  }
+
+  private def composeHeaders(request: HttpRequest, shouldRedirect: Boolean, networkUserId: String) = {
+    val headersWithoutCookie = List(
+      RawHeader("P3P", "policyref=\"%s\", CP=\"%s\"".format(config.p3pPolicyRef, config.p3pCP)),
+      getAccessControlAllowOriginHeader(request),
+      `Access-Control-Allow-Credentials`(true)
+    )
+
+    val resolvedCookies = config.cookieConfig match {
+      case Some(cookieConfig) =>
+        val responseCookie = HttpCookie(
+          cookieConfig.name, networkUserId,
+          expires = Some(DateTime.now + cookieConfig.expiration),
+          domain = cookieConfig.domain
+        )
+        `Set-Cookie`(responseCookie) :: headersWithoutCookie
+      case None => headersWithoutCookie
     }
+
+    val headers = if (shouldRedirect) {
+      val redirect = request.uri.withQuery(Map(config.thirdPartyCookiesParameter -> "true"))
+      `Location`(redirect) :: resolvedCookies
+    } else resolvedCookies
+    headers
+  }
 
   /**
    * Creates a response to the CORS preflight Options request
@@ -222,7 +236,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
   def preflightResponse(request: HttpRequest) = HttpResponse().withHeaders(List(
     getAccessControlAllowOriginHeader(request),
     `Access-Control-Allow-Credentials`(true),
-    `Access-Control-Allow-Headers`( "Content-Type")))
+    `Access-Control-Allow-Headers`("Content-Type")))
 
   def flashCrossDomainPolicy = HttpEntity(
     contentType = ContentType(MediaTypes.`text/xml`, HttpCharsets.`ISO-8859-1`),
@@ -242,10 +256,10 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
    * @return Header
    */
   private def getAccessControlAllowOriginHeader(request: HttpRequest) =
-    `Access-Control-Allow-Origin`(request.headers.find(_ match {
+    `Access-Control-Allow-Origin`(request.headers.find {
       case `Origin`(origin) => true
       case _ => false
-    }) match {
+    } match {
       case Some(`Origin`(origin)) => SomeOrigins(origin)
       case _ => AllOrigins
     })
