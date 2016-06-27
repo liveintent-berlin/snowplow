@@ -102,7 +102,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       (HttpResponse, List[Array[Byte]]) = {
 
     val thirdPartyCookieParamPresent = Option(queryParams).exists(_.contains(config.thirdPartyCookiesParameter))
-    val shouldRedirect = requestCookie.isEmpty && !thirdPartyCookieParamPresent && pixelExpected
+    val shouldRedirect = config.n3pcRedirectEnabled && requestCookie.isEmpty && !thirdPartyCookieParamPresent && pixelExpected
 
     // Make a Tuple2 with the ip address and the shard partition key
       val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
