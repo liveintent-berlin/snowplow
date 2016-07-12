@@ -164,7 +164,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       Nil
     }
 
-    val headers = composeHeaders(request, shouldRedirect, networkUserId)
+    val headers = composeHeaders(request, shouldRedirect, networkUserId, queryParams)
 
     val (httpResponse, badQsResponse) = if (path startsWith "/r/") {
       // A click redirect
@@ -202,7 +202,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     (httpResponse, badQsResponse ++ sinkResponse)
   }
 
-  private def composeHeaders(request: HttpRequest, shouldRedirect: Boolean, networkUserId: String) = {
+  private def composeHeaders(request: HttpRequest, shouldRedirect: Boolean, networkUserId: String, queryParams: String) = {
     val headersWithoutCookie = List(
       RawHeader("P3P", "policyref=\"%s\", CP=\"%s\"".format(config.p3pPolicyRef, config.p3pCP)),
       getAccessControlAllowOriginHeader(request),
@@ -222,7 +222,9 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     }
 
     val headers = if (shouldRedirect) {
-      val redirect = request.uri.withQuery(Map(config.thirdPartyCookiesParameter -> "true"))
+      val uri = request.uri.withQuery(queryParams)
+      val allParams = uri.query.toMap ++ Map(config.thirdPartyCookiesParameter -> "true")
+      val redirect = request.uri.withQuery(allParams)
       `Location`(redirect) :: resolvedCookies
     } else resolvedCookies
     headers
