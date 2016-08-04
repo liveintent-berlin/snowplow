@@ -219,7 +219,7 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
         `Set-Cookie`(responseCookie) :: headersWithoutCookie
       case None => headersWithoutCookie
     }
-    val protoValue = request.headers.find(_.name == "X-Forwarded-Proto").map(_.value).getOrElse("http")
+    lazy val protoValue = request.headers.find(_.name == "X-Forwarded-Proto").map(_.value).getOrElse("http")
 
     val headers = if (shouldRedirect) {
       val originalUri = URLEncodedUtils.parse(URI.create("?" + queryParams), "UTF-8")
