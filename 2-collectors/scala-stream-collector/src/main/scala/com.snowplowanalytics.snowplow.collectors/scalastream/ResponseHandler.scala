@@ -226,12 +226,17 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
         `Set-Cookie`(responseCookie) :: headersWithoutCookie
       case None => headersWithoutCookie
     }
+    val protoValue = request.headers.find(_.name == "X-Forwarded-Proto").map(_.value).getOrElse("http")
 
     val headers = if (shouldRedirect) {
+      val originalUri = URLEncodedUtils.parse(URI.create("?" + queryParams), "UTF-8")
+        .find(_.getName == "url")
+        .map(_.getValue)
+      val originalUriScheme = originalUri.map(URI.create(_).getScheme).getOrElse(protoValue)
       val uri = request.uri.withQuery(queryParams)
       val allParams = uri.query.toMap ++ Map(config.thirdPartyCookiesParameter -> "true")
-      val redirect = request.uri.withQuery(allParams)
-      `Location`(redirect) :: resolvedCookies
+      val redirectUri = request.uri.withQuery(allParams).withScheme(originalUriScheme)
+      `Location`(redirectUri) :: resolvedCookies
     } else resolvedCookies
     headers
   }
