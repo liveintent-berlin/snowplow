@@ -18,7 +18,7 @@ package scalastream
 
 // Scala
 import org.specs2.mock.Mockito
-import spray.http.StatusCodes
+import spray.http.{Rendering, StatusCodes}
 
 import scala.collection.mutable.MutableList
 
@@ -102,12 +102,63 @@ collector {
     // option. However, the testing does not read this option and a
     // remote address always needs to be set.
     def CollectorGet(uri: String, cookie: Option[`HttpCookie`] = None,
-                     remoteAddr: String = "127.0.0.1") = {
+                     remoteAddr: String = "127.0.0.1", additionalHeaders: List[HttpHeader] = List()) = {
       val headers: MutableList[HttpHeader] =
-        MutableList(`Remote-Address`(remoteAddr),`Raw-Request-URI`(uri))
+        MutableList(`Remote-Address`(remoteAddr),`Raw-Request-URI`(uri)) ++ additionalHeaders
       cookie.foreach(headers += `Cookie`(_))
       Get(uri).withHeaders(headers.toList)
     }
+    "return a redirect with n3pc parameter while keeping request params and using original site schema" in {
+      val sink = smartMock[AbstractSink]
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
+      val originalUrl = "/i?uid=someUid&cx=someCx&url=https://example.com/something"
+      CollectorGet(originalUrl) ~> collectorService.collectorRoute ~> check {
+        response.status.mustEqual(StatusCodes.Found)
+        //we're redirecting so we should not save anything to kinesis
+        there was no(sink).storeRawEvents(any, any)
+        val locationHeader: String = header("Location").get.value
+        val httpCookies: List[HttpCookie] = headers.collect {
+          case `Set-Cookie`(hc) => hc
+        }
+        locationHeader must beEqualTo(s"https://example.com$originalUrl&${collectorConfig.thirdPartyCookiesParameter}=true")
+        locationHeader must contain(collectorConfig.thirdPartyCookiesParameter)
+        //a cookie must be sent back
+        httpCookies must not be empty
+      }
+    }
+
+    "return a redirect with n3pc parameter with protocol from X-Forwarded-Proto" in {
+      val sink = smartMock[AbstractSink]
+
+      sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
+        case Array(firstArg, secondArg) => firstArg.asInstanceOf[List[Array[Byte]]]
+      }
+      }
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
+      val originalUrl = "/i?uid=someUid&cx=someCx"
+      CollectorGet(originalUrl, additionalHeaders = List(RawHeader("X-Forwarded-Proto", "https"))) ~> collectorService.collectorRoute ~> check {
+        response.status.mustEqual(StatusCodes.Found)
+        //we're redirecting so we should not save anything to kinesis
+        there was no(sink).storeRawEvents(any, any)
+        val locationHeader: String = header("Location").get.value
+        val httpCookies: List[HttpCookie] = headers.collect {
+          case `Set-Cookie`(hc) => hc
+        }
+        locationHeader must beEqualTo(s"https://example.com$originalUrl&${collectorConfig.thirdPartyCookiesParameter}=true")
+        locationHeader must contain(collectorConfig.thirdPartyCookiesParameter)
+        //a cookie must be sent back
+        httpCookies must not be empty
+      }
+    }
+
     "return a redirect with n3pc parameter while keeping request params" in {
       val sink = smartMock[AbstractSink]
       sink.storeRawEvents(any[List[Array[Byte]]], anyString).answers{(params, mock) => params match {
