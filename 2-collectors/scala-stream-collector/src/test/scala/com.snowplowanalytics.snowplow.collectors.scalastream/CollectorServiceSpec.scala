@@ -510,5 +510,10 @@ collector {
       storedEvent.path must beEqualTo("/i")
       storedEvent.querystring must beEqualTo(payloadData)
     }
+    "report itself as healthy" in {
+      CollectorGet("/health") ~> collectorService.collectorRoute ~> check {
+        response.status must beEqualTo(spray.http.StatusCodes.OK)
+      }
+    }
   }
 }
