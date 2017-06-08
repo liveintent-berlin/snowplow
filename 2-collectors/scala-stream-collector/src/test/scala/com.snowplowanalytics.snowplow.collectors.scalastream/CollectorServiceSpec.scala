@@ -286,6 +286,10 @@ collector {
       }
     }
     "return a cookie containing nuid query parameter" in {
+      val sink = new TestSink
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/i?nuid=UUID_Test_New") ~> collectorService.collectorRoute ~> check {
         headers must not be empty
 
@@ -330,6 +334,10 @@ collector {
       }
     }
     "override cookie with nuid parameter" in {
+      val sink = new TestSink
+      val sinks = CollectorSinks(sink, sink)
+      val responseHandler = new ResponseHandler(collectorConfig, sinks)
+      val collectorService = new CollectorService(collectorConfig, responseHandler, system)
       CollectorGet("/i?nuid=UUID_Test_New", Some(HttpCookie("sp", "UUID_Test"))) ~>
           collectorService.collectorRoute ~> check {
         val httpCookies: List[HttpCookie] = headers.collect {
@@ -498,7 +506,7 @@ collector {
       storedEvent.timestamp must beCloseTo(DateTime.now.clicks, 60000)
       storedEvent.encoding must beEqualTo("UTF-8")
       storedEvent.ipAddress must beEqualTo("127.0.0.1")
-      storedEvent.collector must beEqualTo("ssc-0.7.0-test")
+      storedEvent.collector must beEqualTo("ssc-0.8.0-test")
       storedEvent.path must beEqualTo("/i")
       storedEvent.querystring must beEqualTo(payloadData)
     }
