@@ -101,8 +101,8 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
       request: HttpRequest, refererUri: Option[String], path: String, pixelExpected: Boolean):
       (HttpResponse, List[Array[Byte]]) = {
 
-    val thirdPartyCookieParamPresent = Option(queryParams).exists(_.contains(config.thirdPartyCookiesParameter))
-    val shouldRedirect = config.n3pcRedirectEnabled && requestCookie.isEmpty && !thirdPartyCookieParamPresent && pixelExpected
+    val thirdPartyCookieParamPresent = request.uri.query.get(config.thirdPartyCookiesParameter).isDefined
+    val shouldRedirect = config.n3pcRedirectEnabled && requestCookie.isEmpty && !thirdPartyCookieParamPresent
 
     // Make a Tuple2 with the ip address and the shard partition key
     val (ipAddress, partitionKey) = ip.toOption.map(_.getHostAddress) match {
@@ -201,7 +201,10 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
         if (shouldRedirect) HttpResponse(StatusCodes.Found) else HttpResponse(entity = HttpEntity(`image/gif`, ResponseHandler.pixel))
       } else {
         // See https://github.com/snowplow/snowplow-javascript-tracker/issues/482
-        HttpResponse(entity = "ok")
+
+        if(shouldRedirect){
+          HttpResponse(StatusCodes.TemporaryRedirect)
+        } else HttpResponse(entity = "ok")
       }
     }.withHeaders(headers) -> Nil
 
@@ -233,8 +236,8 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
         .find(_.getName == "url")
         .map(_.getValue)
       val originalUriScheme = originalUri.map(URI.create(_).getScheme).getOrElse(protoValue)
-      val uri = request.uri.withQuery(queryParams)
-      val allParams = uri.query.toMap ++ Map(config.thirdPartyCookiesParameter -> "true")
+      val uri = request.uri.withQuery(request.uri.query.toString())
+      val allParams = (uri.query.toMap ++ Map(config.thirdPartyCookiesParameter -> "true")).filter{case (key, _ ) => key.nonEmpty}
       val redirectUri = request.uri.withQuery(allParams).withScheme(originalUriScheme)
       `Location`(redirectUri) :: resolvedCookies
     } else resolvedCookies
