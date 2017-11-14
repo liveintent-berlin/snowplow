@@ -437,7 +437,6 @@ collector {
         val httpCookie = httpCookies.head
         httpCookie.content must beEqualTo("UUID_Test")
       }
-      1 mustEqual 1
     }
 
 
