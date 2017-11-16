@@ -21,8 +21,9 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.net.URI
+
 import org.apache.http.client.utils.URLEncodedUtils
-import spray.http.{HttpHeader, HttpResponse, StatusCodes}
+import spray.http._
 
 // Apache Commons
 import org.apache.commons.codec.binary.Base64
@@ -151,8 +152,15 @@ class ResponseHandler(config: CollectorConfig, sinks: CollectorSinks)(implicit c
     // Set the content type
     request.headers.find(_ match {case `Content-Type`(ct) => true; case _ => false}) foreach {
 
-      // toLowerCase called because Spray seems to convert "utf" to "UTF"
-      ct => event.contentType = ct.value.toLowerCase
+      ct =>
+        if(request.method == HttpMethods.POST && ct.value.toLowerCase == MediaTypes.`application/x-www-form-urlencoded`.value){
+          // Browsers do not correctly follow redirects for application/json types, so form encoded is sent. Here' we're
+          // faking the contentType so that the rest of the pipeline works fine.
+          event.contentType = ContentTypes.`application/json`.value.toLowerCase
+        } else {
+          // toLowerCase called because Spray seems to convert "utf" to "UTF"
+          event.contentType = ct.value.toLowerCase
+        }
     }
 
     // Only send to Kinesis if we aren't shutting down and we're not going to redirect
