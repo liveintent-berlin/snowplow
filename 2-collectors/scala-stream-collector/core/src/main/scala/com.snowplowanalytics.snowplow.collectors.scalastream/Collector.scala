@@ -22,7 +22,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
-import com.snowplowanalytics.snowplow.collectors.scalastream.metrics.{MetricsDirectives, MetricsRoute, MetricsService, PrometheusMetricsService}
+import com.snowplowanalytics.snowplow.collectors.scalastream.metrics._
 import com.snowplowanalytics.snowplow.collectors.scalastream.model._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.slf4j.LoggerFactory
