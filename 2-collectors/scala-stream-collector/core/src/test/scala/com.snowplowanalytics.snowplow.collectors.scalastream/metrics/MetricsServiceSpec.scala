@@ -5,9 +5,7 @@ import java.time.Duration
 import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
 import org.specs2.mutable.Specification
 
-
 class MetricsServiceSpec extends Specification {
-
 
   "Prometheus metrics service" should {
     "return report about the observed requests" in {
