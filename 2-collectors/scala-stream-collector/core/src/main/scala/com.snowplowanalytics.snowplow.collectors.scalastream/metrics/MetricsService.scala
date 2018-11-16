@@ -4,6 +4,7 @@ import java.time.Duration
 
 import akka.http.scaladsl.model.{HttpMethod, StatusCode, Uri}
 import com.snowplowanalytics.snowplow.collectors.scalastream.metrics.PrometheusMetricsService.Metrics._
+import com.snowplowanalytics.snowplow.collectors.scalastream.metrics.PrometheusMetricsService.NanosecondsInSecond
 import io.prometheus.client.exporter.common.TextFormat
 import io.prometheus.client.{CollectorRegistry, Counter, Gauge, Histogram}
 import org.apache.commons.io.output.StringBuilderWriter
@@ -33,7 +34,7 @@ class PrometheusMetricsService() extends MetricsService {
     val path = uri.path.toString
     val methodValue = method.value
     val code = status.intValue().toString
-    requestDurationHistogram.labels(path, methodValue, code).observe(duration.toMillis.toDouble)
+    requestDurationHistogram.labels(path, methodValue, code).observe(duration.toNanos / NanosecondsInSecond)
     requestCounter.labels(path, methodValue, code).inc()
   }
 
@@ -47,8 +48,10 @@ class PrometheusMetricsService() extends MetricsService {
 
 object PrometheusMetricsService {
 
+  final val NanosecondsInSecond: Double = Math.pow(10, 9)
+
   object Metrics {
-    final val HttpRequestDuration = "http_request_duration_millis"
+    final val HttpRequestDuration = "http_request_duration_seconds"
     final val HttpRequestDurationHelp = "Latency per endpoint"
 
     final val HttpRequestCount = "http_requests_total"
