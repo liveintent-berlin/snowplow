@@ -110,7 +110,7 @@ package model {
     sink: SinkConfig,
     buffer: BufferConfig
   )
-  final case class MetricsConfig(enabled: Boolean)
+  final case class MetricsConfig(enabled: Boolean, durationBuckets: Option[List[Double]])
   final case class CollectorConfig(
     interface: String,
     port: Int,

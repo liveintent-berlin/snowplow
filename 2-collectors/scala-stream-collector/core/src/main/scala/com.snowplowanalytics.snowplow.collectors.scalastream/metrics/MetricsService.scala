@@ -5,6 +5,7 @@ import java.time.Duration
 import akka.http.scaladsl.model.{HttpMethod, StatusCode, Uri}
 import com.snowplowanalytics.snowplow.collectors.scalastream.metrics.PrometheusMetricsService.Metrics._
 import com.snowplowanalytics.snowplow.collectors.scalastream.metrics.PrometheusMetricsService.NanosecondsInSecond
+import com.snowplowanalytics.snowplow.collectors.scalastream.model.MetricsConfig
 import io.prometheus.client.exporter.common.TextFormat
 import io.prometheus.client.{CollectorRegistry, Counter, Gauge, Histogram}
 import org.apache.commons.io.output.StringBuilderWriter
@@ -17,13 +18,17 @@ trait MetricsService {
 
 }
 
-class PrometheusMetricsService() extends MetricsService {
+class PrometheusMetricsService(metricsConfig: MetricsConfig) extends MetricsService {
 
   private val registry = new CollectorRegistry
   private val requestCounter: Counter =
     Counter.build(HttpRequestCount, HttpRequestCountHelp).labelNames(Labels: _*).register(registry)
+  private val requestDurationHistogramBuilder = Histogram.build(HttpRequestDuration, HttpRequestDurationHelp).labelNames(Labels: _*)
   private val requestDurationHistogram: Histogram =
-    Histogram.build(HttpRequestDuration, HttpRequestDurationHelp).labelNames(Labels: _*).register(registry)
+    metricsConfig.durationBuckets
+      .map(buckets => requestDurationHistogramBuilder.buckets(buckets: _*).register(registry))
+      .getOrElse(requestDurationHistogramBuilder.register(registry))
+
   private val applicationVersionGauge = Gauge.build("service_version", "Java, scala versions and runnable name")
     .labelNames("java_version", "scala_version", "runnable")
     .register(registry)

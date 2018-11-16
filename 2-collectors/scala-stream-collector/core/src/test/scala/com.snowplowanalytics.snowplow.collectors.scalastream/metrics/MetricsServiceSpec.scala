@@ -3,13 +3,14 @@ package com.snowplowanalytics.snowplow.collectors.scalastream.metrics
 import java.time.Duration
 
 import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
+import com.snowplowanalytics.snowplow.collectors.scalastream.model.MetricsConfig
 import org.specs2.mutable.Specification
 
 class MetricsServiceSpec extends Specification {
 
   "Prometheus metrics service" should {
     "return report about the observed requests" in {
-      val metricsService = new PrometheusMetricsService
+      val metricsService = new PrometheusMetricsService(MetricsConfig(enabled = true, None))
 
       metricsService.observeRequest(HttpMethods.POST, Uri("/endpoint"), StatusCodes.BadGateway, Duration.ofSeconds(3))
 

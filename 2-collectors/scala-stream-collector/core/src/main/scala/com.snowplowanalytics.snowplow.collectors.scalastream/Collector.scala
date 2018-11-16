@@ -72,7 +72,7 @@ trait Collector {
       override def collectorService = new CollectorService(collectorConf, sinks)
     }
 
-    val prometheusMetricsService = new PrometheusMetricsService
+    val prometheusMetricsService = new PrometheusMetricsService(collectorConf.metrics)
 
     val metricsRoute = new MetricsRoute {
       override def metricsService: MetricsService = prometheusMetricsService
