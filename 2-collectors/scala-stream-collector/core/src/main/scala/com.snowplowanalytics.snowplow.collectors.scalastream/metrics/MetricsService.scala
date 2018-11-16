@@ -21,19 +21,19 @@ class PrometheusMetricsService() extends MetricsService {
   private val registry = new CollectorRegistry
   private val requestCounter: Counter =
     Counter.build(HttpRequestCount, HttpRequestCountHelp).labelNames(Labels: _*).register(registry)
-  private val requestHistogram: Histogram =
+  private val requestDurationHistogram: Histogram =
     Histogram.build(HttpRequestDuration, HttpRequestDurationHelp).labelNames(Labels: _*).register(registry)
-  private val metaGauge = Gauge.build("service_version", "Java, scala versions and runnable name")
+  private val applicationVersionGauge = Gauge.build("service_version", "Java, scala versions and runnable name")
     .labelNames("java_version", "scala_version", "runnable")
     .register(registry)
 
-  metaGauge.labels(StaticMetrics.javaVersion, StaticMetrics.scalaVersion, StaticMetrics.runnableName).set(1)
+  applicationVersionGauge.labels(StaticMetrics.javaVersion, StaticMetrics.scalaVersion, StaticMetrics.runnableName).set(1)
 
   override def observeRequest(method: HttpMethod, uri: Uri, status: StatusCode, duration: Duration): Unit = {
     val path = uri.path.toString
     val methodValue = method.value
     val code = status.intValue().toString
-    requestHistogram.labels(path, methodValue, code).observe(duration.toMillis.toDouble)
+    requestDurationHistogram.labels(path, methodValue, code).observe(duration.toMillis.toDouble)
     requestCounter.labels(path, methodValue, code).inc()
   }
 
