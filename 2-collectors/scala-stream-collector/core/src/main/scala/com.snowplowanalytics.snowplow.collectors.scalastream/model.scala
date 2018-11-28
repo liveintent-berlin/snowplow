@@ -115,6 +115,7 @@ package model {
     sink: SinkConfig,
     buffer: BufferConfig
   )
+  final case class PrometheusMetricsConfig(enabled: Boolean, durationBuckets: Option[List[Double]])
   final case class CollectorConfig(
     interface: String,
     port: Int,
@@ -125,7 +126,8 @@ package model {
     cookieBounce: CookieBounceConfig,
     redirectMacro: RedirectMacroConfig,
     rootResponse: RootResponseConfig,
-    streams: StreamsConfig
+    streams: StreamsConfig,
+    prometheusMetrics: PrometheusMetricsConfig
   ) {
     val cookieConfig = if (cookie.enabled) Some(cookie) else None
     val doNotTrackHttpCookie =
